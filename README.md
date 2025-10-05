@@ -1,16 +1,77 @@
-# React + Vite
+# 🚀 QuickChat LLM
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A full-stack AI chat application powered by Google Gemini AI with a beautiful, feature-rich interface.
 
-Currently, two official plugins are available:
+![QuickChat LLM](https://img.shields.io/badge/AI-Powered-blue)
+![React](https://img.shields.io/badge/React-18-blue)
+![Vercel](https://img.shields.io/badge/Deployed-Vercel-black)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## ✨ Features
 
-## React Compiler
+- 💬 **Real-time AI Chat** - Stream responses from Google Gemini
+- 🔍 **Search Messages** - Find any conversation instantly
+- 📊 **Usage Statistics** - Track tokens and conversation metrics
+- ⭐ **Favorite Messages** - Star important responses
+- 🔄 **Regenerate Responses** - Get alternative answers
+- 🎤 **Voice Input** - Speak your messages
+- 🌙 **Dark/Light Mode** - Beautiful themes
+- 📱 **Fully Responsive** - Works on all devices
+- 💾 **Persistent Storage** - Never lose your conversations
+- 📥 **Export Chats** - Download your conversations
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🛠️ Tech Stack
 
-## Expanding the ESLint configuration
+- **Frontend:** React 18 + Vite
+- **Styling:** Tailwind CSS
+- **Icons:** React Icons
+- **Markdown:** React Markdown
+- **Backend:** Vercel Serverless Functions
+- **AI:** Google Gemini API
+- **Deployment:** Vercel
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 🚀 Live Demo
+
+**[Try it now!](https://quickchat-2eq4beow9-ankit-webs-projects.vercel.app)**
+
+## 📦 Installation
+
+\`\`\`bash
+# Clone repository
+git clone https://github.com/Ankit-web/quickchat-llm.git
+cd quickchat-llm
+
+# Install dependencies
+npm install
+
+# Create .env file
+echo "GEMINI_API_KEY=your_api_key_here" > .env
+
+# Start dev server
+npm run dev
+\`\`\`
+
+## 🔑 Getting Gemini API Key
+
+1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Create an API key
+3. Add it to your .env file
+
+## 🌟 Usage
+
+1. Open http://localhost:3000
+2. Type a message or use voice input
+3. Get instant AI responses
+4. Use all the advanced features!
+
+## 👨‍💻 Author
+
+**Ankit Kumar**
+- GitHub: [@Ankit-web](https://github.com/Ankit-web)
+
+## 📄 License
+
+MIT License
+
+---
+
+**Made with ❤️ using React and AI**
