@@ -1,0 +1,234 @@
+import { useState, useRef, useEffect } from 'react';
+import { FiSend, FiSettings, FiSun, FiMoon, FiCpu, FiDownload } from 'react-icons/fi';
+import ReactMarkdown from 'react-markdown';
+
+export default function Chat() {
+  const [messages, setMessages] = useState(() => {
+    const saved = localStorage.getItem('quickchat-messages');
+    return saved ? JSON.parse(saved) : [{ role: 'assistant', content: '🚀 Welcome to QuickChat LLM!\n\nI can chat with you using multiple AI models. What would you like to talk about?' }];
+  });
+
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedModel, setSelectedModel] = useState('gemini-2.0-flash-exp');
+  const [personality, setPersonality] = useState('general');
+  const [temperature, setTemperature] = useState(0.7);
+  const [darkMode, setDarkMode] = useState(true);
+  const [models, setModels] = useState({});
+  const [showSettings, setShowSettings] = useState(false);
+  const [tokenCount, setTokenCount] = useState(0);
+  const [favorites, setFavorites] = useState(() => {
+    const saved = localStorage.getItem('quickchat-favorites');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => { localStorage.setItem('quickchat-messages', JSON.stringify(messages)); }, [messages]);
+  useEffect(() => { localStorage.setItem('quickchat-favorites', JSON.stringify(favorites)); }, [favorites]);
+  useEffect(() => {
+    fetch('/api/models', { method: 'POST' }).then(res => res.json()).then(data => setModels(data.models || {})).catch(() => setModels({ 'gemini-2.0-flash-exp': { name: 'Gemini 2.0 Flash' } }));
+  }, []);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  useEffect(() => { setTokenCount(Math.floor(messages.reduce((acc, msg) => acc + msg.content.length, 0) / 4)); }, [messages]);
+  const sendMessage = async () => {
+    if (!input.trim() || isLoading) return;
+    const userMessage = { role: 'user', content: input };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [...messages, userMessage], model: selectedModel, personality, temperature })
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let assistantMessage = { role: 'assistant', content: '', model: selectedModel };
+      setMessages(prev => [...prev, assistantMessage]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') break;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                assistantMessage.content += parsed.content;
+                setMessages(prev => prev.map((msg, i) => i === prev.length - 1 ? { ...assistantMessage } : msg));
+              }
+            } catch (e) {}
+          }
+        }
+      }
+    } catch (error) {
+      setMessages(prev => [...prev, { role: 'assistant', content: `❌ Error: ${error.message}`, error: true }]);
+    }
+    setIsLoading(false);
+  };
+
+  const copyMessage = (content) => {
+    navigator.clipboard.writeText(content);
+    alert('✅ Message copied!');
+  };
+
+  const regenerateResponse = async () => {
+    if (messages.length < 2 || isLoading) return;
+    const lastUserIndex = messages.map((m, i) => m.role === 'user' ? i : -1).filter(i => i !== -1).pop();
+    if (lastUserIndex === -1) return;
+    const messagesUntilLastUser = messages.slice(0, lastUserIndex + 1);
+    setMessages(messagesUntilLastUser);
+    const lastUserMsg = messages[lastUserIndex];
+    setInput(lastUserMsg.content);
+    setTimeout(() => { sendMessage(); setInput(''); }, 100);
+  };
+
+  const toggleFavorite = (index) => {
+    if (favorites.includes(index)) {
+      setFavorites(favorites.filter(i => i !== index));
+    } else {
+      setFavorites([...favorites, index]);
+    }
+  };
+
+  const startVoiceInput = () => {
+    if (!('webkitSpeechRecognition' in window)) {
+      alert('❌ Voice input not supported');
+      return;
+    }
+    const recognition = new window.webkitSpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onresult = (event) => setInput(event.results[0][0].transcript);
+    recognition.onerror = () => alert('❌ Voice error');
+    recognition.start();
+  };
+
+  const clearChat = () => {
+    if (confirm('Clear all messages?')) {
+      setMessages([{ role: 'assistant', content: '🧹 Chat cleared!' }]);
+      localStorage.removeItem('quickchat-messages');
+      setFavorites([]);
+    }
+  };
+
+  const exportChat = async (format) => {
+    try {
+      const response = await fetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, format, title: 'QuickChat' })
+      });
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `chat.${format}`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      alert('Export failed');
+    }
+  };
+
+  const filteredMessages = searchQuery ? messages.filter(m => m.content.toLowerCase().includes(searchQuery.toLowerCase())) : messages;
+
+  return (
+    <div className={`${darkMode ? 'dark bg-gray-900' : 'bg-gray-50'} min-h-screen`}>
+      <div className="max-w-6xl mx-auto flex flex-col h-screen">
+        <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b p-4 flex items-center justify-between`}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center"><FiCpu className="text-white" /></div>
+            <div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">QuickChat LLM</h1>
+              <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>{models[selectedModel]?.name || 'Loading...'} • {tokenCount} tokens</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {showSearch && <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search..." className={`px-3 py-1 text-sm rounded-lg ${darkMode ? 'bg-gray-700 text-white' : 'bg-white'}`} />}
+            <button onClick={() => setShowSearch(!showSearch)} className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>🔍</button>
+            <button onClick={() => setShowStats(true)} className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>📊</button>
+            <button onClick={clearChat} className={`px-3 py-1 text-sm rounded-md ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>Clear</button>
+            <button onClick={() => setDarkMode(!darkMode)} className={`p-2 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}>{darkMode ? <FiSun size={18} /> : <FiMoon size={18} />}</button>
+            <button onClick={() => setShowSettings(!showSettings)} className={`p-2 rounded-lg ${showSettings ? 'bg-blue-500 text-white' : darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}><FiSettings size={18} /></button>
+            <button onClick={() => exportChat('markdown')} className="p-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white"><FiDownload size={18} /></button>
+          </div>
+        </div>
+        {showSettings && (
+          <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b p-4`}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div><label className={`block text-sm mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Model</label><select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} className={`w-full p-2 border rounded-lg ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : ''}`}>{Object.entries(models).map(([key, model]) => <option key={key} value={key}>{model.name}</option>)}</select></div>
+              <div><label className={`block text-sm mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Personality</label><select value={personality} onChange={(e) => setPersonality(e.target.value)} className={`w-full p-2 border rounded-lg ${darkMode ? 'bg-gray-700 border-gray-600 text-white' : ''}`}><option value="general">General</option><option value="creative">Creative</option><option value="technical">Technical</option><option value="friendly">Friendly</option></select></div>
+              <div><label className={`block text-sm mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Creativity: {temperature}</label><input type="range" min="0" max="2" step="0.1" value={temperature} onChange={(e) => setTemperature(parseFloat(e.target.value))} className="w-full" /></div>
+            </div>
+          </div>
+        )}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {filteredMessages.map((message, index) => (
+            <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} group`}>
+              <div className={`max-w-[80%] p-4 rounded-2xl relative ${message.role === 'user' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' : message.error ? `${darkMode ? 'bg-red-900/50 text-red-200' : 'bg-red-50 text-red-800'}` : `${darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border border-gray-200'}`}`}>
+                {favorites.includes(index) && <span className="absolute -top-2 -right-2 text-2xl">⭐</span>}
+                <div className={`prose ${darkMode ? 'prose-invert' : ''} max-w-none prose-sm`}><ReactMarkdown>{message.content}</ReactMarkdown></div>
+                {message.role === 'assistant' && !message.error && (
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                    <button onClick={() => copyMessage(message.content)} className="px-2 py-1 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs">📋</button>
+                    <button onClick={() => toggleFavorite(index)} className={`px-2 py-1 rounded-lg ${favorites.includes(index) ? 'bg-yellow-500' : 'bg-gray-600'} hover:bg-yellow-600 text-white text-xs`}>{favorites.includes(index) ? '⭐' : '☆'}</button>
+                    {index === filteredMessages.length - 1 && !isLoading && <button onClick={regenerateResponse} className="px-2 py-1 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-xs">🔄</button>}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className={`p-4 rounded-2xl ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+                <div className="flex items-center space-x-2"><div className="flex space-x-1"><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div><div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div></div><span className="text-sm">Thinking...</span></div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+        {messages.length === 1 && !searchQuery && (
+          <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t p-4`}>
+            <p className={`text-sm mb-3 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>💡 Quick Prompts:</p>
+            <div className="flex flex-wrap gap-2">{['Explain quantum computing', 'Write a Python function', 'Summarize machine learning', 'Debug my code', 'Creative story idea'].map((prompt, i) => <button key={i} onClick={() => setInput(prompt)} className={`px-3 py-2 text-sm rounded-lg ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'}`}>{prompt}</button>)}</div>
+          </div>
+        )}
+        <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t p-4`}>
+          <div className="flex items-end gap-2">
+            <button onClick={startVoiceInput} disabled={isLoading} className={`p-4 rounded-2xl ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'} ${isLoading ? 'opacity-50' : ''}`}>🎤</button>
+            <textarea ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())} placeholder="Type your message..." className={`flex-1 p-4 border-2 rounded-2xl resize-none ${darkMode ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-gray-50 border-gray-300'}`} rows={Math.min(input.split('\n').length, 4)} disabled={isLoading} />
+            <button onClick={sendMessage} disabled={isLoading || !input.trim()} className={`p-4 rounded-2xl transition-all ${isLoading || !input.trim() ? 'bg-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 hover:scale-105'} text-white`}><FiSend size={20} /></button>
+          </div>
+        </div>
+        {showStats && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowStats(false)}>
+            <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-2xl p-6 max-w-md w-full m-4`} onClick={(e) => e.stopPropagation()}>
+              <h2 className={`text-xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>📊 Usage Statistics</h2>
+              <div className={`space-y-3 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <div className="flex justify-between"><span>Total Messages:</span><span className="font-bold">{messages.length}</span></div>
+                <div className="flex justify-between"><span>User Messages:</span><span className="font-bold">{messages.filter(m => m.role === 'user').length}</span></div>
+                <div className="flex justify-between"><span>AI Responses:</span><span className="font-bold">{messages.filter(m => m.role === 'assistant').length}</span></div>
+                <div className="flex justify-between"><span>Total Tokens:</span><span className="font-bold">{tokenCount}</span></div>
+                <div className="flex justify-between"><span>Favorites:</span><span className="font-bold">{favorites.length} ⭐</span></div>
+              </div>
+              <button onClick={() => setShowStats(false)} className="mt-6 w-full py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-lg font-medium">Close</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
